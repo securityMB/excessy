@@ -1,15 +1,36 @@
 {
-  "name": "excessy-api",
-  "version": "0.0.1",
-  "description": "The server side of excessy.",
-  "main": "index.js",
+  "name": "excessy",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A modern TypeScript XSS learning tool with Socket.IO",
+  "main": "dist/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:modules\"",
+    "dev:server": "tsx watch src/server.ts",
+    "dev:modules": "node build-modules.js --watch",
+    "build": "npm run build:server && npm run build:modules && npm run build:client",
+    "build:server": "tsc",
+    "build:modules": "node build-modules.js",
+    "build:client": "esbuild src/client/*.ts --bundle --outdir=public/dist --format=esm --target=es2020",
+    "start": "node dist/server.js",
+    "clean": "rimraf dist public/dist"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.16.3",
-    "express-ws": "^4.0.0"
+    "express": "^4.18.2",
+    "js-yaml": "^4.1.0",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.10.5",
+    "concurrently": "^8.2.2",
+    "esbuild": "^0.19.8",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
   }
 }
